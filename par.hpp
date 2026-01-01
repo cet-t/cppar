@@ -22,9 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#pragma once
+
 #include <algorithm>
-#include <cinttypes>
-#include <functional>
+#include <cstddef>
 #include <future>
 #include <iterator>
 #include <thread>
@@ -36,24 +37,28 @@ public:
     template <typename I, typename F>
     static void for_each(I begin, I end, F func)
     {
-        const auto length = std::distance(begin, end);
-        if (!length || length == 0)
+        using diff_t = typename std::iterator_traits<I>::difference_type;
+        const diff_t length = std::distance(begin, end);
+        if (length <= 0)
         {
             return;
         }
 
-        auto thread_count = std::thread::hardware_concurrency();
-        auto chunk_size = length / thread_count;
-        if (chunk_size == 0)
+        const auto hw = std::thread::hardware_concurrency();
+        const diff_t thread_count = (hw == 0) ? 1 : static_cast<diff_t>(hw);
+
+        if (length < thread_count)
         {
             std::for_each(begin, end, func);
             return;
         }
 
+        const diff_t chunk_size = length / thread_count;
+
         std::vector<std::future<void>> futures;
-        futures.reserve(thread_count);
+        futures.reserve(static_cast<std::size_t>(thread_count));
         auto chunk_start = begin;
-        for (auto i = 0u; i < thread_count; ++i)
+        for (diff_t i = 0; i < thread_count; ++i)
         {
             auto chunk_end = (i == thread_count - 1) ? end : std::next(chunk_start, chunk_size);
 

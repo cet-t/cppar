@@ -1,33 +1,99 @@
 #include "par.hpp"
-#include <bits/stdc++.h>
-#include <format>
+#include <algorithm>
+#include <cassert>
+#include <iostream>
+#include <mutex>
+#include <numeric>
+#include <vector>
 
-#define SIZE 1024
-
-int main(int argc, const char **argv)
+static void test_empty()
 {
-#ifdef __cpp_lib_format
-    std::cout << std::format("threads   : {}", std::thread::hardware_concurrency()) << std::endl;
-    std::cout << std::format("chunks    : {}", SIZE / std::thread::hardware_concurrency()) << std::endl;
-#endif
+    std::vector<int> v;
+    par::for_each(v.begin(), v.end(), [](int) { assert(false); });
+    std::cout << "test_empty: passed\n";
+}
 
-    auto v = std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    for (int i = 0; i < SIZE; ++i)
+static void test_single()
+{
+    std::vector<int> v = {42};
+    int result = 0;
+    std::mutex mx;
+    par::for_each(v.begin(), v.end(), [&result, &mx](int i)
     {
-        v.push_back(i);
-    }
+        std::lock_guard<std::mutex> lock(mx);
+        result = i;
+    });
+    assert(result == 42);
+    std::cout << "test_single: passed\n";
+}
 
-    auto res = std::vector<int>();
-    std::mutex res_mx;
-    par::for_each(v.begin(), v.end(), [&res, &res_mx](int i)
-                  { 
-                    std::lock_guard<std::mutex> lock2(res_mx); 
-                    res.push_back(i*2); });
-
-    for (auto i = res.begin(); i < res.end(); i += SIZE / 100)
+static void test_fewer_than_threads()
+{
+    std::vector<int> v = {1, 2, 3};
+    std::vector<int> res;
+    std::mutex mx;
+    par::for_each(v.begin(), v.end(), [&res, &mx](int i)
     {
-        std::cout << *i << std::endl;
-    }
+        std::lock_guard<std::mutex> lock(mx);
+        res.push_back(i);
+    });
+    std::sort(res.begin(), res.end());
+    assert((res == std::vector<int>{1, 2, 3}));
+    std::cout << "test_fewer_than_threads: passed\n";
+}
 
+static void test_basic()
+{
+    const int size = 1024;
+    std::vector<int> v(size);
+    std::iota(v.begin(), v.end(), 0);
+
+    std::vector<int> res;
+    res.reserve(size);
+    std::mutex mx;
+    par::for_each(v.begin(), v.end(), [&res, &mx](int i)
+    {
+        std::lock_guard<std::mutex> lock(mx);
+        res.push_back(i * 2);
+    });
+
+    std::sort(res.begin(), res.end());
+
+    std::vector<int> expected(size);
+    std::transform(v.begin(), v.end(), expected.begin(), [](int i) { return i * 2; });
+
+    assert(res == expected);
+    std::cout << "test_basic: passed\n";
+}
+
+static void test_all_elements_processed()
+{
+    const int size = 10000;
+    std::vector<int> v(size, 1);
+    std::vector<int> processed(size, 0);
+    std::mutex mx;
+
+    par::for_each(v.begin(), v.end(), [&processed, &mx, &v](int &elem)
+    {
+        std::lock_guard<std::mutex> lock(mx);
+        std::size_t idx = static_cast<std::size_t>(&elem - v.data());
+        processed[idx] = 1;
+    });
+
+    assert(std::all_of(processed.begin(), processed.end(), [](int x) { return x == 1; }));
+    std::cout << "test_all_elements_processed: passed\n";
+}
+
+int main()
+{
+    std::cout << "threads: " << std::thread::hardware_concurrency() << "\n";
+
+    test_empty();
+    test_single();
+    test_fewer_than_threads();
+    test_basic();
+    test_all_elements_processed();
+
+    std::cout << "all tests passed\n";
     return 0;
 }

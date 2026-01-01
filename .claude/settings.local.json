@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(g++ -std=c++17 -O2 -Wall -Wextra -pthread -o test test.cpp)",
+      "Bash(./test)"
+    ]
+  }
+}
